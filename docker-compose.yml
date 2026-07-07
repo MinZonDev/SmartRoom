@@ -1,0 +1,84 @@
+name: smartroom
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartroom-postgres
+    environment:
+      POSTGRES_USER: smartroom
+      POSTGRES_PASSWORD: smartroom
+      POSTGRES_DB: smartroom
+    ports:
+      - "5434:5432"   # 5432 và 5433 đã bị DB của các dự án cũ trên máy chiếm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartroom -d smartroom"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: smartroom-redis-cache   # tránh đụng container "smartroom-redis" của dự án cũ
+    ports:
+      - "6380:6379"   # host 6380 vì 6379 đã bị redis của dự án cũ (finding-rooms) chiếm
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  localstack:
+    image: localstack/localstack:3
+    container_name: smartroom-localstack
+    environment:
+      SERVICES: sqs,s3
+    ports:
+      - "4566:4566"
+    volumes:
+      # Script tự tạo queue + DLQ + bucket khi LocalStack sẵn sàng
+      - ./infra/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q '\"sqs\": \"\\(running\\|available\\)\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # --- API + Worker chạy container (profile "app") ---
+  # Dev thường ngày: chỉ chạy infra (docker compose up -d), còn API/worker
+  # chạy trên host để hot-reload. Full container: docker compose --profile app up
+  api:
+    build: ./backend
+    container_name: smartroom-api
+    profiles: ["app"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment: &app_env
+      DATABASE_URL: postgresql+asyncpg://smartroom:smartroom@postgres:5432/smartroom
+      REDIS_URL: redis://redis:6379/0
+      AWS_REGION: ap-southeast-1
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      SQS_BILLING_QUEUE_URL: http://localstack:4566/000000000000/smartroom-billing
+      S3_INVOICE_BUCKET: smartroom-invoices
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
+  worker:
+    build: ./backend
+    container_name: smartroom-worker
+    profiles: ["app"]
+    command: python -m app.workers.billing_worker
+    environment: *app_env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
+volumes:
+  pgdata:

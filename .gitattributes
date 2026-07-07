@@ -1,0 +1,5 @@
+# Shell scripts chạy trong container Linux — BẮT BUỘC giữ LF
+# (CRLF sẽ làm bash trong LocalStack lỗi ": command not found")
+*.sh text eol=lf
+
+* text=auto

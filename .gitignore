@@ -1,0 +1,29 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# --- Env & secrets (giữ lại .env.example) ---
+.env
+.env.local
+.env.*.local
+
+# --- Node / Next.js ---
+node_modules/
+frontend/.next/
+frontend/out/
+*.tsbuildinfo
+frontend/next-env.d.ts
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+
+# --- Data ---
+*.sqlite3
