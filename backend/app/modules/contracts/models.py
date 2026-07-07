@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     Enum as SAEnum,
     ForeignKey,
+    Index,
     Numeric,
     SmallInteger,
     String,
@@ -25,6 +26,15 @@ from app.shared.enums import ContractStatus
 
 class Contract(Base):
     __tablename__ = "contracts"
+    __table_args__ = (
+        # 1 phòng chỉ có 1 hợp đồng active — chốt chặn race condition ở DB
+        Index(
+            "uq_contracts_one_active_per_room",
+            "room_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -54,7 +64,16 @@ class ContractMember(Base):
     """Người ở trong hợp đồng — hỗ trợ ghép phòng (N khách thuê / 1 hợp đồng)."""
 
     __tablename__ = "contract_members"
-    __table_args__ = (UniqueConstraint("contract_id", "user_id"),)
+    __table_args__ = (
+        UniqueConstraint("contract_id", "user_id"),
+        # Mỗi hợp đồng chỉ có 1 người đại diện
+        Index(
+            "uq_contract_members_one_primary",
+            "contract_id",
+            unique=True,
+            postgresql_where=text("is_primary = TRUE"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")

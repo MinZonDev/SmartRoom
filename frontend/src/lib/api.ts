@@ -142,6 +142,23 @@ export async function login(email: string, password: string): Promise<void> {
   localStorage.setItem(REFRESH_KEY, data.refresh_token);
 }
 
+export async function logout(): Promise<void> {
+  const refreshToken =
+    typeof window === "undefined" ? null : localStorage.getItem(REFRESH_KEY);
+  if (refreshToken) {
+    // Thu hồi refresh token server-side; lỗi mạng cũng không chặn logout local
+    try {
+      await api("/auth/logout", {
+        method: "POST",
+        json: { refresh_token: refreshToken },
+      });
+    } catch {
+      /* bỏ qua */
+    }
+  }
+  clearToken();
+}
+
 export function register(payload: {
   full_name: string;
   email: string;

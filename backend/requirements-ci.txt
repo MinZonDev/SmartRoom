@@ -15,3 +15,7 @@ numpy>=1.26
 opencv-python-headless>=4.10
 scikit-learn>=1.5
 pytest>=8.3
+# Integration tests (billing service import boto3 qua shared.storage; PDF thật)
+pytest-asyncio>=0.24
+boto3>=1.35
+reportlab>=4.2

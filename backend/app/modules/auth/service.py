@@ -1,6 +1,8 @@
 """Business logic module auth — không import gì từ FastAPI."""
 
 import asyncio
+import time
+from typing import Any
 from uuid import UUID
 
 import jwt
@@ -8,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.modules.auth.denylist import TokenDenylist
 from app.modules.auth.models import User
 from app.modules.auth.schemas import RegisterRequest, TokenResponse
 from app.modules.auth.security import (
@@ -21,8 +24,11 @@ from app.shared.exceptions import EmailAlreadyExistsError, InvalidCredentialsErr
 
 
 class AuthService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, denylist: TokenDenylist | None = None
+    ) -> None:
         self._session = session
+        self._denylist = denylist
 
     async def register(self, payload: RegisterRequest) -> User:
         existing_id = await self._session.scalar(
@@ -57,23 +63,44 @@ class AuthService:
         return self._issue_tokens(user.id)
 
     async def refresh(self, refresh_token: str) -> TokenResponse:
-        """Đổi refresh token lấy cặp token mới (rotation).
+        """Đổi refresh token lấy cặp token mới (rotation, dùng-một-lần).
 
-        Stateless — chưa có danh sách thu hồi server-side; token cũ vẫn
-        dùng được tới khi hết hạn (revocation list Redis: backlog).
+        Token vừa dùng bị đưa vào denylist ngay — nếu bị đánh cắp và dùng
+        lại sẽ nhận 401. Access token vẫn stateless (sống tối đa 60').
         """
+        assert self._denylist is not None, "refresh cần denylist"
         try:
             payload = decode_refresh_token(refresh_token)
             user_id = UUID(payload["sub"])
+            jti: str = payload["jti"]
         except (jwt.InvalidTokenError, KeyError, ValueError):
             raise InvalidCredentialsError(
                 "Refresh token không hợp lệ hoặc đã hết hạn"
             ) from None
 
+        if await self._denylist.is_revoked(jti):
+            raise InvalidCredentialsError("Refresh token đã bị thu hồi")
+
         user = await self._session.get(User, user_id)
         if user is None or not user.is_active:
             raise InvalidCredentialsError("Tài khoản không tồn tại hoặc đã bị khóa")
+
+        await self._denylist.revoke(jti, self._remaining_ttl(payload))
         return self._issue_tokens(user.id)
+
+    async def logout(self, refresh_token: str) -> None:
+        """Thu hồi refresh token. Idempotent — token rác/hết hạn cũng trả OK."""
+        assert self._denylist is not None, "logout cần denylist"
+        try:
+            payload = decode_refresh_token(refresh_token)
+            jti: str = payload["jti"]
+        except (jwt.InvalidTokenError, KeyError):
+            return  # token không hợp lệ thì không có gì để thu hồi
+        await self._denylist.revoke(jti, self._remaining_ttl(payload))
+
+    @staticmethod
+    def _remaining_ttl(payload: dict[str, Any]) -> int:
+        return int(payload["exp"] - time.time())
 
     @staticmethod
     def _issue_tokens(user_id: UUID) -> TokenResponse:

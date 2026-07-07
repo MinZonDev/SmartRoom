@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { clearToken, getToken, me } from "@/lib/api";
+import { getToken, logout as apiLogout, me } from "@/lib/api";
 import type { User } from "@/lib/types";
 
 const NAV_ITEMS = [
@@ -30,8 +30,8 @@ export default function AppLayout({
     });
   }, [router]);
 
-  function logout() {
-    clearToken();
+  async function logout() {
+    await apiLogout(); // thu hồi refresh token server-side rồi xóa local
     router.replace("/login");
   }
 

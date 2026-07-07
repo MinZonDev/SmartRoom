@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_session
 from app.core.dependencies import get_redis_client
+from app.modules.auth.denylist import TokenDenylist
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
@@ -21,6 +22,10 @@ from app.modules.auth.schemas import (
 from app.modules.auth.service import AuthService
 from app.shared.exceptions import NotFoundError
 from app.shared.rate_limit import FixedWindowRateLimiter
+
+
+def get_denylist() -> TokenDenylist:
+    return TokenDenylist(get_redis_client())
 
 
 def get_login_rate_limiter() -> FixedWindowRateLimiter:
@@ -66,13 +71,27 @@ async def login(
 @router.post(
     "/refresh",
     response_model=TokenResponse,
-    summary="Đổi refresh token lấy cặp access + refresh mới",
+    summary="Đổi refresh token lấy cặp mới (dùng-một-lần — token cũ bị thu hồi)",
 )
 async def refresh_tokens(
     payload: RefreshRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
+    denylist: Annotated[TokenDenylist, Depends(get_denylist)],
 ) -> TokenResponse:
-    return await AuthService(session).refresh(payload.refresh_token)
+    return await AuthService(session, denylist).refresh(payload.refresh_token)
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Đăng xuất — thu hồi refresh token",
+)
+async def logout(
+    payload: RefreshRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    denylist: Annotated[TokenDenylist, Depends(get_denylist)],
+) -> None:
+    await AuthService(session, denylist).logout(payload.refresh_token)
 
 
 @router.get("/me", response_model=UserResponse, summary="Thông tin user hiện tại")

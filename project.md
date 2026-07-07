@@ -17,7 +17,10 @@
 | E4 | Commit mốc 3 | ✅ commit `f7c9553` |
 | F0 | Push GitHub `https://github.com/MinZonDev/SmartRoom` | ✅ remote origin, branch main |
 | F1 | Luồng OCR hoàn chỉnh: upload ảnh → đọc số → confirm → meter_readings kèm ảnh S3 | ✅ **test OCR THẬT**: đọc "01315"/"00842" chính xác 100%, confidence ≥0.9999, warm 2.4s/request |
-| F2 | *Session sau:* integration tests testcontainers, revocation list logout, Terraform SQS/DLQ, notification email, deploy AWS | ⬜ backlog |
+| F2a | Integration tests với Postgres thật (billing/contracts/expenses) + postgres service trong CI | ✅ 6 tests — tổng 43→46 pass |
+| F2b | Logout + thu hồi refresh token (Redis denylist, refresh dùng-một-lần) | ✅ test thật: dùng lại refresh cũ 401, refresh sau logout 401 |
+| F2c | Commit mốc 5 + CI xanh | 🔄 đang chờ CI |
+| G | *Session sau:* Terraform SQS/DLQ, notification email, deploy AWS, OCR crop ROI | ⬜ backlog |
 
 *Cập nhật bảng này ngay khi chuyển trạng thái: 🔄 đang làm / ✅ xong / ⬜ chưa.*
 
@@ -147,6 +150,21 @@
 - **Kết quả test OCR thật** (ảnh đồng hồ giả lập bằng cv2): "01315"→1315 confidence 1.0; "00842"→842 confidence 0.9999. Cold start (tải model ~150MB + nạp): 2m37s; **warm: 2.4s/request**. `/ocr/health` phản ánh đúng trạng thái warm-up.
 - Lưu ý vận hành: process API đang chạy vẫn dùng được easyocr cài sau đó (import lazy trong `load()`) — không cần restart.
 
+### 2026-07-08 — Hoàn thiện đợt 4: Integration tests + Token revocation ✅
+- **Integration tests** (`tests/integration/`, marker `integration`, tự skip nếu không có Postgres):
+  - `test_billing_flow.py`: hóa đơn đúng từng đồng (3.660.000đ với đủ 4 charge_type + 2 người), idempotency, thiếu chỉ số ghi lỗi không chặn
+  - `test_contract_state.py`: vòng đời activate→terminate đầy đủ + **partial unique index chặn 2 active/phòng khi bypass service** (ghi thẳng SQL)
+  - `test_expense_balances.py`: bất biến tổng số dư = 0, settlement pending không tính, confirm xong về 0
+  - Fixture: mỗi test nhận schema sạch (drop_all/create_all, function-scoped tránh lỗi event-loop); `TEST_DATABASE_URL` (local mặc định :5434/smartroom_test); dùng pytest-asyncio (`asyncio_mode=auto`)
+  - **ORM bổ sung 2 partial unique indexes** vào models (parity với DB) để create_all trong test DB có đúng ràng buộc
+  - CI: job backend-tests thêm **postgres service** — chạy cả integration tests
+- **Token revocation** (`auth/denylist.py` — Redis, TTL = thời gian sống còn lại của token):
+  - Token có claim `jti`; **refresh dùng-một-lần**: rotation tự thu hồi token vừa dùng — token bị đánh cắp dùng lại là 401
+  - `POST /auth/logout`: thu hồi refresh token (idempotent — token rác vẫn 204); FE nút Đăng xuất gọi API thật rồi mới xóa local
+  - ⚠️ Session đăng nhập trước update này không có `jti` → refresh bị 401, phải login lại (một lần duy nhất)
+  - Access token vẫn stateless (sống tối đa 60') — trade-off chấp nhận được
+- Tests: **46 pass** (40 unit + 6 integration). E2E curl: refresh cũ → 401 ✓, refresh sau logout → 401 ✓.
+
 ---
 
 ## 📁 Cấu trúc backend
@@ -271,7 +289,8 @@ curl -X POST http://localhost:8000/api/v1/billing/close-month \
 - [x] ~~docker-compose.yml~~ + ~~Alembic~~ — xong 2026-07-07, e2e đã kiểm chứng
 - [x] ~~Module auth JWT~~ — xong 2026-07-07 (login demo: `chunha@smartroom.demo` / `smartroom123`)
 - [x] ~~Refresh token + rate-limit login~~ — xong 2026-07-07
-- [ ] **Auth còn lại**: revocation list khi logout (Redis denylist), đổi/quên mật khẩu, cấp role landlord khi tạo property đầu tiên
+- [x] ~~Revocation list logout + refresh dùng-một-lần~~ — xong 2026-07-08
+- [ ] **Auth còn lại**: đổi/quên mật khẩu, cấp role landlord khi tạo property đầu tiên
 - [x] ~~Module properties/contracts CRUD~~ — xong 2026-07-07, e2e toàn trình đã kiểm chứng
 - [x] ~~Module expenses~~ — xong 2026-07-07, e2e đã kiểm chứng (backend MVP hoàn chỉnh 🎉)
 - [x] ~~Frontend Next.js MVP~~ — xong 2026-07-07 (login/dashboard/property 4 tab/expenses)
@@ -281,7 +300,7 @@ curl -X POST http://localhost:8000/api/v1/billing/close-month \
 - [x] ~~Presigned URL S3~~ — xong 2026-07-07 (landlord; tenant chờ trang tenant)
 - [ ] **Hạ tầng SQS**: khai báo DLQ + maxReceiveCount (Terraform/CDK)
 - [x] ~~Unit tests logic thuần~~ — 30 tests (chia tiền, matching, OCR, security)
-- [ ] **Integration tests**: `InvoiceGenerationService`/`ContractService` với testcontainers Postgres
+- [x] ~~Integration tests~~ — xong 2026-07-08 (Postgres thật, cả local lẫn CI)
 - [x] ~~CI GitHub Actions~~ — file đã có, verify run khi push GitHub lần đầu
 - [ ] **Notification**: bắn email/Zalo cho tenant khi hóa đơn phát hành (event sau khi worker xong)
 - [x] ~~OCR: ảnh S3 + confirm vào meter_readings~~ — xong 2026-07-07, test OCR thật chính xác 100%

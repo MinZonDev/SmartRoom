@@ -6,7 +6,7 @@ qua asyncio.to_thread để không block event loop.
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import bcrypt
 import jwt
@@ -38,6 +38,7 @@ def _create_token(user_id: UUID, token_type: str, lifetime: timedelta) -> str:
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "type": token_type,
+        "jti": uuid4().hex,  # định danh token — dùng cho denylist khi logout/rotation
         "iat": now,
         "exp": now + lifetime,
     }
