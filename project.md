@@ -19,7 +19,7 @@
 | F1 | Luồng OCR hoàn chỉnh: upload ảnh → đọc số → confirm → meter_readings kèm ảnh S3 | ✅ **test OCR THẬT**: đọc "01315"/"00842" chính xác 100%, confidence ≥0.9999, warm 2.4s/request |
 | F2a | Integration tests với Postgres thật (billing/contracts/expenses) + postgres service trong CI | ✅ 6 tests — tổng 43→46 pass |
 | F2b | Logout + thu hồi refresh token (Redis denylist, refresh dùng-một-lần) | ✅ test thật: dùng lại refresh cũ 401, refresh sau logout 401 |
-| F2c | Commit mốc 5 + CI xanh | 🔄 đang chờ CI |
+| F2c | Commit mốc 5 + CI xanh | ✅ commit `2584bdb` — CI xanh, integration tests chạy trên GitHub với postgres service |
 | G | *Session sau:* Terraform SQS/DLQ, notification email, deploy AWS, OCR crop ROI | ⬜ backlog |
 
 *Cập nhật bảng này ngay khi chuyển trạng thái: 🔄 đang làm / ✅ xong / ⬜ chưa.*
