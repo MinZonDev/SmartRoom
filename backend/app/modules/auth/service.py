@@ -1,7 +1,9 @@
 """Business logic module auth — không import gì từ FastAPI."""
 
 import asyncio
+from uuid import UUID
 
+import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +12,8 @@ from app.modules.auth.models import User
 from app.modules.auth.schemas import RegisterRequest, TokenResponse
 from app.modules.auth.security import (
     create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
     hash_password,
     verify_password,
 )
@@ -50,7 +54,31 @@ class AuthService:
         if user is None or not password_ok or not user.is_active:
             raise InvalidCredentialsError("Email hoặc mật khẩu không đúng")
 
+        return self._issue_tokens(user.id)
+
+    async def refresh(self, refresh_token: str) -> TokenResponse:
+        """Đổi refresh token lấy cặp token mới (rotation).
+
+        Stateless — chưa có danh sách thu hồi server-side; token cũ vẫn
+        dùng được tới khi hết hạn (revocation list Redis: backlog).
+        """
+        try:
+            payload = decode_refresh_token(refresh_token)
+            user_id = UUID(payload["sub"])
+        except (jwt.InvalidTokenError, KeyError, ValueError):
+            raise InvalidCredentialsError(
+                "Refresh token không hợp lệ hoặc đã hết hạn"
+            ) from None
+
+        user = await self._session.get(User, user_id)
+        if user is None or not user.is_active:
+            raise InvalidCredentialsError("Tài khoản không tồn tại hoặc đã bị khóa")
+        return self._issue_tokens(user.id)
+
+    @staticmethod
+    def _issue_tokens(user_id: UUID) -> TokenResponse:
         return TokenResponse(
-            access_token=create_access_token(user.id),
+            access_token=create_access_token(user_id),
+            refresh_token=create_refresh_token(user_id),
             expires_in=get_settings().jwt_access_token_expire_minutes * 60,
         )

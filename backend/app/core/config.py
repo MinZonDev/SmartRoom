@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "dev-secret-change-me-in-production"
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
+    jwt_refresh_token_expire_days: int = 14
+
+    # Rate-limit đăng nhập (chống brute-force) — đếm theo email, fixed window
+    login_rate_limit_attempts: int = 5
+    login_rate_limit_window_seconds: int = 60
 
     database_url: str = (
         "postgresql+asyncpg://smartroom:smartroom@localhost:5432/smartroom"

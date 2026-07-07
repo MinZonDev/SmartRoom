@@ -71,9 +71,22 @@ async def list_invoices(
 
 
 @router.get(
+    "/my-invoices",
+    response_model=list[InvoiceResponse],
+    summary="Hóa đơn của tôi (dành cho khách thuê)",
+)
+async def list_my_invoices(
+    current_user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[InvoiceResponse]:
+    invoices = await InvoiceQueryService(session).list_my_invoices(current_user_id)
+    return [InvoiceResponse.model_validate(i) for i in invoices]
+
+
+@router.get(
     "/invoices/{invoice_id}/pdf-url",
     response_model=InvoicePdfUrlResponse,
-    summary="Presigned URL tải PDF hóa đơn (hết hạn sau 15 phút)",
+    summary="Presigned URL tải PDF hóa đơn (chủ nhà hoặc người trong hợp đồng)",
 )
 async def get_invoice_pdf_url(
     invoice_id: UUID,
@@ -81,7 +94,7 @@ async def get_invoice_pdf_url(
     session: Annotated[AsyncSession, Depends(get_session)],
     storage: Annotated[S3Storage, Depends(get_storage)],
 ) -> InvoicePdfUrlResponse:
-    invoice = await InvoiceQueryService(session).get_owned_invoice(
+    invoice = await InvoiceQueryService(session).get_invoice_for_user(
         current_user_id, invoice_id
     )
     if not invoice.pdf_url:

@@ -7,7 +7,9 @@ import pytest
 
 from app.modules.auth.security import (
     create_access_token,
+    create_refresh_token,
     decode_access_token,
+    decode_refresh_token,
     hash_password,
     verify_password,
 )
@@ -51,6 +53,20 @@ class TestJWT:
         )
         with pytest.raises(pyjwt.InvalidTokenError):
             decode_access_token(forged)
+
+    def test_refresh_token_roundtrip(self) -> None:
+        user_id = uuid4()
+        payload = decode_refresh_token(create_refresh_token(user_id))
+        assert payload["sub"] == str(user_id)
+        assert payload["type"] == "refresh"
+
+    def test_access_khong_dung_duoc_lam_refresh(self) -> None:
+        with pytest.raises(pyjwt.InvalidTokenError):
+            decode_refresh_token(create_access_token(uuid4()))
+
+    def test_refresh_khong_dung_duoc_lam_access(self) -> None:
+        with pytest.raises(pyjwt.InvalidTokenError):
+            decode_access_token(create_refresh_token(uuid4()))
 
     def test_sai_type_bi_tu_choi(self) -> None:
         """Token type != access (vd refresh sau này) không dùng được làm access."""

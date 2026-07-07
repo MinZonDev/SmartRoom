@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -22,7 +22,7 @@ from app.modules.billing.pdf import (
     render_invoice_pdf,
 )
 from app.modules.billing.schemas import BillingTaskMessage
-from app.modules.contracts.models import Contract, ContractMember
+from app.modules.contracts.models import Contract, ContractMember  # noqa: F401 — ContractMember dùng trong query tenant
 from app.modules.properties.models import (
     MeterReading,
     Property,
@@ -60,13 +60,34 @@ class InvoiceQueryService:
         )
         return list(result.all())
 
-    async def get_owned_invoice(self, owner_id: UUID, invoice_id: UUID) -> Invoice:
+    async def list_my_invoices(self, user_id: UUID) -> list[Invoice]:
+        """Hóa đơn của khách thuê — mọi hợp đồng user từng là thành viên."""
+        result = await self._session.scalars(
+            select(Invoice)
+            .join(Contract, Invoice.contract_id == Contract.id)
+            .join(ContractMember, ContractMember.contract_id == Contract.id)
+            .where(ContractMember.user_id == user_id)
+            .options(selectinload(Invoice.items))
+            .order_by(Invoice.period.desc(), Invoice.code)
+        )
+        return list(result.all())
+
+    async def get_invoice_for_user(self, user_id: UUID, invoice_id: UUID) -> Invoice:
+        """Chủ nhà HOẶC thành viên hợp đồng đều xem được hóa đơn."""
         invoice = await self._session.scalar(
             select(Invoice)
             .join(Contract, Invoice.contract_id == Contract.id)
             .join(Room, Contract.room_id == Room.id)
             .join(Property, Room.property_id == Property.id)
-            .where(Invoice.id == invoice_id, Property.owner_id == owner_id)
+            .outerjoin(ContractMember, ContractMember.contract_id == Contract.id)
+            .where(
+                Invoice.id == invoice_id,
+                or_(
+                    Property.owner_id == user_id,
+                    ContractMember.user_id == user_id,
+                ),
+            )
+            .limit(1)
         )
         if invoice is None:
             raise NotFoundError("Hóa đơn không tồn tại hoặc bạn không có quyền")

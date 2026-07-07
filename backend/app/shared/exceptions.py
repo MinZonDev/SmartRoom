@@ -40,6 +40,10 @@ class InvalidCredentialsError(AuthError):
     """Sai email/mật khẩu hoặc tài khoản bị khóa."""
 
 
+class RateLimitExceededError(AuthError):
+    """Vượt ngưỡng rate limit (HTTP 429)."""
+
+
 class OCRError(DomainError):
     """Lỗi thuộc luồng OCR."""
 

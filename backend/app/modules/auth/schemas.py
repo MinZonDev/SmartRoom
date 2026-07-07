@@ -29,5 +29,10 @@ class UserResponse(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
-    expires_in: int = Field(description="Số giây token còn hiệu lực")
+    expires_in: int = Field(description="Số giây access token còn hiệu lực")
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str

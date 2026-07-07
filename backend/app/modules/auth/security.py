@@ -32,24 +32,46 @@ def verify_password(plain: str, password_hash: str | None) -> bool:
     return result and password_hash is not None
 
 
-def create_access_token(user_id: UUID) -> str:
+def _create_token(user_id: UUID, token_type: str, lifetime: timedelta) -> str:
     settings = get_settings()
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": str(user_id),
-        "type": "access",
+        "type": token_type,
         "iat": now,
-        "exp": now + timedelta(minutes=settings.jwt_access_token_expire_minutes),
+        "exp": now + lifetime,
     }
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> dict[str, Any]:
-    """Giải mã + verify chữ ký & hạn. Raise jwt.InvalidTokenError nếu không hợp lệ."""
+def create_access_token(user_id: UUID) -> str:
+    minutes = get_settings().jwt_access_token_expire_minutes
+    return _create_token(user_id, "access", timedelta(minutes=minutes))
+
+
+def create_refresh_token(user_id: UUID) -> str:
+    days = get_settings().jwt_refresh_token_expire_days
+    return _create_token(user_id, "refresh", timedelta(days=days))
+
+
+def decode_token(token: str, expected_type: str) -> dict[str, Any]:
+    """Giải mã + verify chữ ký, hạn và loại token.
+
+    Raise jwt.InvalidTokenError nếu không hợp lệ — access token không dùng
+    được ở endpoint refresh và ngược lại.
+    """
     settings = get_settings()
     payload: dict[str, Any] = jwt.decode(
         token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
     )
-    if payload.get("type") != "access":
-        raise jwt.InvalidTokenError("Không phải access token")
+    if payload.get("type") != expected_type:
+        raise jwt.InvalidTokenError(f"Không phải {expected_type} token")
     return payload
+
+
+def decode_access_token(token: str) -> dict[str, Any]:
+    return decode_token(token, "access")
+
+
+def decode_refresh_token(token: str) -> dict[str, Any]:
+    return decode_token(token, "refresh")

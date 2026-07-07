@@ -25,6 +25,7 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 
 const TOKEN_KEY = "smartroom_token";
+const REFRESH_KEY = "smartroom_refresh_token";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -37,7 +38,32 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
 }
+
+/** Đổi refresh token lấy cặp token mới. Trả false nếu hết hạn/không có. */
+async function tryRefreshToken(): Promise<boolean> {
+  const refreshToken =
+    typeof window === "undefined" ? null : localStorage.getItem(REFRESH_KEY);
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return false;
+    const data: TokenResponse = await res.json();
+    setToken(data.access_token);
+    localStorage.setItem(REFRESH_KEY, data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Nhiều request 401 cùng lúc chỉ refresh 1 lần
+let refreshInFlight: Promise<boolean> | null = null;
 
 export class ApiError extends Error {
   constructor(
@@ -54,7 +80,11 @@ interface RequestOptions {
   form?: Record<string, string>;
 }
 
-async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+async function api<T>(
+  path: string,
+  opts: RequestOptions = {},
+  isRetryAfterRefresh = false,
+): Promise<T> {
   const headers: Record<string, string> = {};
   let body: BodyInit | undefined;
   if (opts.json !== undefined) {
@@ -72,7 +102,14 @@ async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     body,
   });
 
-  if (res.status === 401 && !path.startsWith("/auth/login")) {
+  if (res.status === 401 && !path.startsWith("/auth/")) {
+    // Access token hết hạn -> thử refresh 1 lần rồi retry request gốc
+    if (!isRetryAfterRefresh) {
+      refreshInFlight ??= tryRefreshToken();
+      const refreshed = await refreshInFlight;
+      refreshInFlight = null;
+      if (refreshed) return api<T>(path, opts, true);
+    }
     clearToken();
     if (typeof window !== "undefined") window.location.href = "/login";
   }
@@ -99,6 +136,7 @@ export async function login(email: string, password: string): Promise<void> {
     form: { username: email, password },
   });
   setToken(data.access_token);
+  localStorage.setItem(REFRESH_KEY, data.refresh_token);
 }
 
 export function register(payload: {
@@ -222,6 +260,10 @@ export function getInvoicePdfUrl(
   invoiceId: string,
 ): Promise<{ url: string; expires_in: number }> {
   return api(`/billing/invoices/${invoiceId}/pdf-url`);
+}
+
+export function listMyInvoices(): Promise<Invoice[]> {
+  return api("/billing/my-invoices");
 }
 
 // ------------------------------------------------------------------ expenses

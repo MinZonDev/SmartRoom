@@ -39,12 +39,12 @@ def get_current_user_id(
 
 
 @lru_cache
-def _redis_client() -> Redis:
+def get_redis_client() -> Redis:
     return Redis.from_url(get_settings().redis_url, decode_responses=True)
 
 
 def get_job_tracker() -> JobTracker:
-    return JobTracker(_redis_client())
+    return JobTracker(get_redis_client())
 
 
 @lru_cache

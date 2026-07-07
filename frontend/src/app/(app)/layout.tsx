@@ -9,6 +9,7 @@ import type { User } from "@/lib/types";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Nhà trọ" },
+  { href: "/my-invoices", label: "Hóa đơn của tôi" },
   { href: "/expenses", label: "Chia tiền" },
 ];
 

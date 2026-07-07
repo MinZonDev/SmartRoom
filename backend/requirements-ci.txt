@@ -1,0 +1,15 @@
+# Dependencies tối thiểu để chạy unit tests trên CI.
+# KHÔNG gồm easyocr (kéo torch ~2GB) — tests OCR dùng FakeEngine;
+# engine thật chỉ import easyocr bên trong load() nên không cần khi test.
+pydantic>=2.10
+pydantic-settings>=2.7
+email-validator>=2.2
+sqlalchemy[asyncio]>=2.0
+fastapi>=0.115
+redis>=5.2
+PyJWT>=2.10
+bcrypt>=4.2
+numpy>=1.26
+opencv-python-headless>=4.10
+scikit-learn>=1.5
+pytest>=8.3

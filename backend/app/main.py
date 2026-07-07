@@ -28,6 +28,7 @@ from app.shared.exceptions import (
     NoReadingDetectedError,
     NotFoundError,
     PermissionDeniedError,
+    RateLimitExceededError,
 )
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,15 @@ def create_app() -> FastAPI:
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"detail": str(exc)},
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    @app.exception_handler(RateLimitExceededError)
+    async def handle_rate_limit(
+        _: Request, exc: RateLimitExceededError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={"detail": str(exc)},
         )
 
     @app.exception_handler(EmailAlreadyExistsError)

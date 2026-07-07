@@ -11,7 +11,11 @@
 | B | Bộ test pytest cho logic thuần (chia tiền, matching, OCR, security) | ✅ 30/30 pass — `backend/tests/`, chạy: `python -m pytest -q` (đã refactor `compute_shares` thành hàm thuần) |
 | C | Presigned URL tải PDF hóa đơn (backend + nút trên FE) | ✅ test thật: tải PDF 2133 bytes từ LocalStack, landlord khác bị 404 |
 | D | Commit mốc 2 (tests + presigned URL) | ✅ commit `8bbbae0` |
-| E | *Session sau:* refresh token, trang tenant, OCR confirm→meter_readings, CI GitHub Actions, Terraform SQS/DLQ, notification email | ⬜ backlog — xem chi tiết mục "Việc tiếp theo" |
+| E1 | Refresh token (rotation) + rate-limit login bằng Redis | ✅ test thật: refresh ra cặp mới, access-làm-refresh bị 401, login sai 401×5→429 |
+| E2 | Trang tenant: khách thuê xem + tải PDF hóa đơn của mình | ✅ test thật: tenant thấy 1 hóa đơn, tải PDF 200, tenant ngoài hợp đồng 404 |
+| E3 | CI GitHub Actions (pytest + npm build) | ✅ file `.github/workflows/ci.yml` (chưa verify run — cần push lên GitHub) |
+| E4 | Commit mốc 3 | ✅ |
+| F | *Session sau:* OCR confirm→meter_readings + upload ảnh S3, integration tests testcontainers, Terraform SQS/DLQ, notification email, deploy AWS | ⬜ backlog |
 
 *Cập nhật bảng này ngay khi chuyển trạng thái: 🔄 đang làm / ✅ xong / ⬜ chưa.*
 
@@ -122,6 +126,14 @@
   - Refactor kèm theo: `compute_shares` từ method → hàm thuần module-level (testable không cần DB)
   - *Chưa có*: integration tests với DB (testcontainers) — backlog
 - **Presigned URL PDF**: `GET /billing/invoices/{id}/pdf-url` → URL S3 có chữ ký, hết hạn 15 phút (bucket không bao giờ public). FE: nút "Tải PDF" trong tab Hóa đơn xin URL mới mỗi lần bấm. `S3Storage` thêm `presigned_url()` + `key_from_uri()`.
+
+### 2026-07-07 — Hoàn thiện đợt 2: Refresh token + Trang tenant + CI ✅
+- **Refresh token (rotation)**: `POST /auth/refresh` — refresh TTL 14 ngày (`JWT_REFRESH_TOKEN_EXPIRE_DAYS`), mỗi lần refresh cấp cặp mới. Token có claim `type` (access/refresh) — dùng chéo bị 401. *Stateless — chưa có revocation list (backlog: Redis denylist khi logout).* FE: lưu cả 2 token, **tự refresh khi gặp 401 rồi retry request gốc** (nhiều request 401 đồng thời chỉ refresh 1 lần — `refreshInFlight` guard trong `api.ts`).
+- **Rate-limit login**: `FixedWindowRateLimiter` (Redis INCR+EXPIRE, `app/shared/rate_limit.py`) — 5 lần/60s theo email → 429. Config: `LOGIN_RATE_LIMIT_ATTEMPTS/WINDOW_SECONDS`. Test thật: 401×5 rồi 429.
+- **Trang tenant**: `GET /billing/my-invoices` (hóa đơn mọi hợp đồng user là thành viên) + pdf-url mở quyền cho **chủ nhà HOẶC thành viên hợp đồng** (`get_invoice_for_user` — outerjoin contract_members). FE: trang `/my-invoices` + mục nav "Hóa đơn của tôi". Test thật: tenant C thấy đúng 1 hóa đơn, tải PDF 200; tenant B ngoài hợp đồng bị 404.
+- **CI**: `.github/workflows/ci.yml` — 2 jobs: pytest (dùng `backend/requirements-ci.txt` — bộ nhẹ KHÔNG có easyocr/torch, tests OCR dùng FakeEngine) + npm build. Chưa verify chạy thật (cần push GitHub).
+- **Tests**: 37 pass (thêm `test_rate_limit.py` với FakeRedis + 3 test refresh token).
+- Refactor nhỏ: `_redis_client` → `get_redis_client` (public, auth router dùng cho limiter).
 
 ---
 
@@ -246,7 +258,8 @@ curl -X POST http://localhost:8000/api/v1/billing/close-month \
 
 - [x] ~~docker-compose.yml~~ + ~~Alembic~~ — xong 2026-07-07, e2e đã kiểm chứng
 - [x] ~~Module auth JWT~~ — xong 2026-07-07 (login demo: `chunha@smartroom.demo` / `smartroom123`)
-- [ ] **Auth nâng cao**: refresh token (rotation), đổi/quên mật khẩu, rate-limit login (Redis), cấp role landlord khi tạo property đầu tiên
+- [x] ~~Refresh token + rate-limit login~~ — xong 2026-07-07
+- [ ] **Auth còn lại**: revocation list khi logout (Redis denylist), đổi/quên mật khẩu, cấp role landlord khi tạo property đầu tiên
 - [x] ~~Module properties/contracts CRUD~~ — xong 2026-07-07, e2e toàn trình đã kiểm chứng
 - [x] ~~Module expenses~~ — xong 2026-07-07, e2e đã kiểm chứng (backend MVP hoàn chỉnh 🎉)
 - [x] ~~Frontend Next.js MVP~~ — xong 2026-07-07 (login/dashboard/property 4 tab/expenses)
@@ -257,7 +270,7 @@ curl -X POST http://localhost:8000/api/v1/billing/close-month \
 - [ ] **Hạ tầng SQS**: khai báo DLQ + maxReceiveCount (Terraform/CDK)
 - [x] ~~Unit tests logic thuần~~ — 30 tests (chia tiền, matching, OCR, security)
 - [ ] **Integration tests**: `InvoiceGenerationService`/`ContractService` với testcontainers Postgres
-- [ ] **CI**: GitHub Actions — pytest + npm build mỗi push
+- [x] ~~CI GitHub Actions~~ — file đã có, verify run khi push GitHub lần đầu
 - [ ] **Notification**: bắn email/Zalo cho tenant khi hóa đơn phát hành (event sau khi worker xong)
 - [ ] **OCR nâng cao**: crop ROI mặt số (detect vùng hiển thị trước khi OCR), lưu ảnh gốc lên S3 + gán `meter_readings.image_url`, endpoint xác nhận kết quả ghi vào `meter_readings`, bake model weights vào Docker image (`OCR_MODEL_DIR`)
 - [ ] **Matching hoàn thiện**: bảng `user_habit_profiles` (migration mới), router `POST /matching/suggestions`, lấy candidates từ DB theo khu vực/tin đăng, cache kết quả vào Redis, học trọng số từ feedback match thành công
