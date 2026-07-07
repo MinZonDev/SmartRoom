@@ -10,7 +10,7 @@
 | A | Git init + .gitignore + README + commit đầu tiên | ✅ commit `2f5ec6d` (102 files; đã gỡ repo git con do create-next-app tạo trong frontend/, .gitattributes ép LF cho *.sh) |
 | B | Bộ test pytest cho logic thuần (chia tiền, matching, OCR, security) | ✅ 30/30 pass — `backend/tests/`, chạy: `python -m pytest -q` (đã refactor `compute_shares` thành hàm thuần) |
 | C | Presigned URL tải PDF hóa đơn (backend + nút trên FE) | ✅ test thật: tải PDF 2133 bytes từ LocalStack, landlord khác bị 404 |
-| D | Commit mốc 2 (tests + presigned URL) | ✅ |
+| D | Commit mốc 2 (tests + presigned URL) | ✅ commit `8bbbae0` |
 | E | *Session sau:* refresh token, trang tenant, OCR confirm→meter_readings, CI GitHub Actions, Terraform SQS/DLQ, notification email | ⬜ backlog — xem chi tiết mục "Việc tiếp theo" |
 
 *Cập nhật bảng này ngay khi chuyển trạng thái: 🔄 đang làm / ✅ xong / ⬜ chưa.*
