@@ -78,6 +78,7 @@ interface RequestOptions {
   method?: string;
   json?: unknown;
   form?: Record<string, string>;
+  formData?: FormData;
 }
 
 async function api<T>(
@@ -92,6 +93,8 @@ async function api<T>(
     body = JSON.stringify(opts.json);
   } else if (opts.form) {
     body = new URLSearchParams(opts.form);
+  } else if (opts.formData) {
+    body = opts.formData; // browser tự đặt multipart boundary
   }
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -207,9 +210,25 @@ export function upsertMeterReading(
     period: string;
     previous_value: number;
     current_value: number;
+    image_url?: string;
   },
 ): Promise<MeterReading> {
   return api(`/rooms/${roomId}/meter-readings`, { method: "PUT", json: payload });
+}
+
+export interface MeterOCRResult {
+  value: number;
+  raw_text: string;
+  confidence: number;
+  needs_confirmation: boolean;
+  candidates: { text: string; confidence: number }[];
+  image_url: string | null;
+}
+
+export function ocrMeterReading(file: File): Promise<MeterOCRResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return api("/ocr/meter-reading", { method: "POST", formData });
 }
 
 // ----------------------------------------------------------------- contracts

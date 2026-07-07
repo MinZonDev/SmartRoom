@@ -225,7 +225,8 @@ class PropertyService:
                 MeterReading.period == payload.period,
             )
         )
-        data = payload.model_dump(exclude={"reading_date"})
+        # exclude_none: không gửi image_url thì giữ nguyên ảnh cũ khi update
+        data = payload.model_dump(exclude={"reading_date"}, exclude_none=True)
         if reading is None:
             reading = MeterReading(
                 room_id=room_id,

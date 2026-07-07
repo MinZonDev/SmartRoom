@@ -19,6 +19,7 @@ import {
   listRooms,
   listServices,
   lookupUser,
+  ocrMeterReading,
   terminateContract,
   upsertMeterReading,
 } from "@/lib/api";
@@ -197,7 +198,30 @@ function MeterForm({
   const [period, setPeriod] = useState("");
   const [prev, setPrev] = useState("");
   const [curr, setCurr] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | undefined>();
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [message, setMessage] = useState("");
+
+  async function onPickImage(file: File | undefined) {
+    if (!file) return;
+    setOcrBusy(true);
+    setMessage("Đang đọc ảnh...");
+    try {
+      // Smart OCR: đọc số từ ảnh, tự điền — user vẫn kiểm tra rồi mới Lưu
+      const result = await ocrMeterReading(file);
+      setCurr(String(result.value));
+      setImageUrl(result.image_url ?? undefined);
+      setMessage(
+        result.needs_confirmation
+          ? `⚠ Đọc được ${result.raw_text} (độ tin cậy thấp ${Math.round(result.confidence * 100)}% — kiểm tra kỹ!)`
+          : `✓ Đọc được ${result.raw_text} (tin cậy ${Math.round(result.confidence * 100)}%)`,
+      );
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "OCR lỗi");
+    } finally {
+      setOcrBusy(false);
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -208,6 +232,7 @@ function MeterForm({
         period: `${period}-01`,
         previous_value: Number(prev),
         current_value: Number(curr),
+        image_url: imageUrl,
       });
       setMessage("Đã lưu chỉ số ✓");
       setTimeout(onDone, 800);
@@ -260,6 +285,16 @@ function MeterForm({
         required
         className="w-28"
       />
+      <label className="cursor-pointer rounded-md border border-dashed border-indigo-300 px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50">
+        {ocrBusy ? "Đang đọc..." : "📷 Đọc từ ảnh"}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          disabled={ocrBusy}
+          onChange={(e) => onPickImage(e.target.files?.[0])}
+        />
+      </label>
       <Button type="submit">Lưu</Button>
       <span className="text-sm text-gray-600">{message}</span>
     </form>

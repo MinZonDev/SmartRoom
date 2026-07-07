@@ -20,6 +20,10 @@ class MeterOCRResponse(BaseModel):
     candidates: list[OCRCandidateSchema] = Field(
         description="Các cụm số khác phát hiện được, để user chọn lại nếu value sai"
     )
+    image_url: str | None = Field(
+        default=None,
+        description="S3 URI ảnh gốc — client gửi kèm khi xác nhận ghi meter_readings",
+    )
 
 
 class OCRHealthResponse(BaseModel):

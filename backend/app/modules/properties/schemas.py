@@ -115,6 +115,9 @@ class MeterReadingUpsert(BaseModel):
     previous_value: Decimal = Field(ge=0)
     current_value: Decimal = Field(ge=0)
     reading_date: date | None = None
+    image_url: str | None = Field(
+        default=None, description="S3 URI ảnh đồng hồ (từ response của OCR)"
+    )
 
     @field_validator("period")
     @classmethod

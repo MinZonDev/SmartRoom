@@ -13,9 +13,11 @@
 | D | Commit mốc 2 (tests + presigned URL) | ✅ commit `8bbbae0` |
 | E1 | Refresh token (rotation) + rate-limit login bằng Redis | ✅ test thật: refresh ra cặp mới, access-làm-refresh bị 401, login sai 401×5→429 |
 | E2 | Trang tenant: khách thuê xem + tải PDF hóa đơn của mình | ✅ test thật: tenant thấy 1 hóa đơn, tải PDF 200, tenant ngoài hợp đồng 404 |
-| E3 | CI GitHub Actions (pytest + npm build) | ✅ file `.github/workflows/ci.yml` (chưa verify run — cần push lên GitHub) |
+| E3 | CI GitHub Actions (pytest + npm build) | ✅ **verify chạy thật trên GitHub: xanh** (sau fix `asyncpg` thiếu trong requirements-ci — commit `700b124`) |
 | E4 | Commit mốc 3 | ✅ commit `f7c9553` |
-| F | *Session sau:* OCR confirm→meter_readings + upload ảnh S3, integration tests testcontainers, Terraform SQS/DLQ, notification email, deploy AWS | ⬜ backlog |
+| F0 | Push GitHub `https://github.com/MinZonDev/SmartRoom` | ✅ remote origin, branch main |
+| F1 | Luồng OCR hoàn chỉnh: upload ảnh → đọc số → confirm → meter_readings kèm ảnh S3 | ✅ **test OCR THẬT**: đọc "01315"/"00842" chính xác 100%, confidence ≥0.9999, warm 2.4s/request |
+| F2 | *Session sau:* integration tests testcontainers, revocation list logout, Terraform SQS/DLQ, notification email, deploy AWS | ⬜ backlog |
 
 *Cập nhật bảng này ngay khi chuyển trạng thái: 🔄 đang làm / ✅ xong / ⬜ chưa.*
 
@@ -134,6 +136,16 @@
 - **CI**: `.github/workflows/ci.yml` — 2 jobs: pytest (dùng `backend/requirements-ci.txt` — bộ nhẹ KHÔNG có easyocr/torch, tests OCR dùng FakeEngine) + npm build. Chưa verify chạy thật (cần push GitHub).
 - **Tests**: 37 pass (thêm `test_rate_limit.py` với FakeRedis + 3 test refresh token).
 - Refactor nhỏ: `_redis_client` → `get_redis_client` (public, auth router dùng cho limiter).
+
+### 2026-07-07 — Hoàn thiện đợt 3: Push GitHub + CI xanh + Smart OCR chạy thật ✅
+- **GitHub**: push lên `https://github.com/MinZonDev/SmartRoom` (remote `origin`, branch `main`).
+- **CI verify thật**: run đầu FAIL vì `requirements-ci.txt` thiếu `asyncpg` (bài học: `app/core/database.py` tạo async engine **ngay lúc import** nên driver cần cả khi unit test không đụng DB — đã tái hiện chính xác bằng venv sạch trước khi fix). Run 2 (commit `700b124`): **cả 2 jobs xanh**.
+- **Luồng Smart OCR end-to-end** (dev machine đã cài easyocr + torch 2.12 CPU):
+  1. `POST /ocr/meter-reading`: đọc số + **upload ảnh gốc lên S3** (`meter-images/{uuid}.jpg`) → trả `image_url` (làm bằng chứng khi tranh chấp chỉ số).
+  2. User xác nhận → `PUT /rooms/{id}/meter-readings` kèm `image_url` (schema mới có field này; update không gửi ảnh thì **giữ ảnh cũ** — `exclude_none`).
+  3. FE: nút "📷 Đọc từ ảnh" trong form ghi chỉ số — OCR tự điền số, hiện cảnh báo khi `needs_confirmation`.
+- **Kết quả test OCR thật** (ảnh đồng hồ giả lập bằng cv2): "01315"→1315 confidence 1.0; "00842"→842 confidence 0.9999. Cold start (tải model ~150MB + nạp): 2m37s; **warm: 2.4s/request**. `/ocr/health` phản ánh đúng trạng thái warm-up.
+- Lưu ý vận hành: process API đang chạy vẫn dùng được easyocr cài sau đó (import lazy trong `load()`) — không cần restart.
 
 ---
 
@@ -272,7 +284,8 @@ curl -X POST http://localhost:8000/api/v1/billing/close-month \
 - [ ] **Integration tests**: `InvoiceGenerationService`/`ContractService` với testcontainers Postgres
 - [x] ~~CI GitHub Actions~~ — file đã có, verify run khi push GitHub lần đầu
 - [ ] **Notification**: bắn email/Zalo cho tenant khi hóa đơn phát hành (event sau khi worker xong)
-- [ ] **OCR nâng cao**: crop ROI mặt số (detect vùng hiển thị trước khi OCR), lưu ảnh gốc lên S3 + gán `meter_readings.image_url`, endpoint xác nhận kết quả ghi vào `meter_readings`, bake model weights vào Docker image (`OCR_MODEL_DIR`)
+- [x] ~~OCR: ảnh S3 + confirm vào meter_readings~~ — xong 2026-07-07, test OCR thật chính xác 100%
+- [ ] **OCR nâng cao**: crop ROI mặt số (detect vùng hiển thị trước khi OCR — cần khi ảnh thật nhiều nhiễu), test với ảnh đồng hồ thật, bake model weights vào Docker image (`OCR_MODEL_DIR`)
 - [ ] **Matching hoàn thiện**: bảng `user_habit_profiles` (migration mới), router `POST /matching/suggestions`, lấy candidates từ DB theo khu vực/tin đăng, cache kết quả vào Redis, học trọng số từ feedback match thành công
 
 ## ⚠️ Ràng buộc nghiệp vụ xử lý ở service layer (DB không ép được)
