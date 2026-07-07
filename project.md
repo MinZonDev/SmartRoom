@@ -14,7 +14,7 @@
 | E1 | Refresh token (rotation) + rate-limit login bằng Redis | ✅ test thật: refresh ra cặp mới, access-làm-refresh bị 401, login sai 401×5→429 |
 | E2 | Trang tenant: khách thuê xem + tải PDF hóa đơn của mình | ✅ test thật: tenant thấy 1 hóa đơn, tải PDF 200, tenant ngoài hợp đồng 404 |
 | E3 | CI GitHub Actions (pytest + npm build) | ✅ file `.github/workflows/ci.yml` (chưa verify run — cần push lên GitHub) |
-| E4 | Commit mốc 3 | ✅ |
+| E4 | Commit mốc 3 | ✅ commit `f7c9553` |
 | F | *Session sau:* OCR confirm→meter_readings + upload ảnh S3, integration tests testcontainers, Terraform SQS/DLQ, notification email, deploy AWS | ⬜ backlog |
 
 *Cập nhật bảng này ngay khi chuyển trạng thái: 🔄 đang làm / ✅ xong / ⬜ chưa.*
