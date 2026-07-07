@@ -66,6 +66,11 @@ class InvoiceResponse(BaseModel):
     items: list[InvoiceItemResponse]
 
 
+class InvoicePdfUrlResponse(BaseModel):
+    url: str
+    expires_in: int = Field(description="Số giây URL còn hiệu lực")
+
+
 class BillingTaskMessage(BaseModel):
     """Contract của message đẩy vào SQS queue billing.
 

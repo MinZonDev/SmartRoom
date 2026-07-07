@@ -60,6 +60,18 @@ class InvoiceQueryService:
         )
         return list(result.all())
 
+    async def get_owned_invoice(self, owner_id: UUID, invoice_id: UUID) -> Invoice:
+        invoice = await self._session.scalar(
+            select(Invoice)
+            .join(Contract, Invoice.contract_id == Contract.id)
+            .join(Room, Contract.room_id == Room.id)
+            .join(Property, Room.property_id == Property.id)
+            .where(Invoice.id == invoice_id, Property.owner_id == owner_id)
+        )
+        if invoice is None:
+            raise NotFoundError("Hóa đơn không tồn tại hoặc bạn không có quyền")
+        return invoice
+
 
 class BillingCommandService:
     """Nhận lệnh 'Chốt tháng' từ API: validate rồi đẩy task — KHÔNG tính toán nặng."""

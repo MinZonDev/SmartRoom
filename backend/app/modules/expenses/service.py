@@ -39,6 +39,51 @@ from app.shared.exceptions import ConflictError, NotFoundError, PermissionDenied
 _CENT = Decimal("0.01")
 
 
+def compute_shares(
+    payload: ExpenseCreate, default_participants: list[UUID]
+) -> list[tuple[UUID, Decimal]]:
+    """Tính phần mỗi người. Bất biến: tổng shares == amount (đến 0.01).
+
+    Hàm thuần (không session) — unit test trực tiếp không cần DB.
+    ROUND_DOWN từng phần rồi phân phối phần dư 0.01/lượt cho các người
+    đầu danh sách — không bao giờ lệch tổng do làm tròn.
+    """
+    if payload.split_method == SplitMethod.EXACT:
+        assert payload.participants is not None  # đã validate ở schema
+        return [(p.user_id, p.amount) for p in payload.participants]  # type: ignore[misc]
+
+    if payload.split_method == SplitMethod.RATIO:
+        assert payload.participants is not None
+        total_weight = sum(p.weight for p in payload.participants)  # type: ignore[misc]
+        raw = [
+            (
+                p.user_id,
+                (payload.amount * p.weight / total_weight).quantize(  # type: ignore[operator]
+                    _CENT, rounding=ROUND_DOWN
+                ),
+            )
+            for p in payload.participants
+        ]
+    else:  # EQUAL
+        ids = (
+            [p.user_id for p in payload.participants]
+            if payload.participants
+            else default_participants
+        )
+        base = (payload.amount / len(ids)).quantize(_CENT, rounding=ROUND_DOWN)
+        raw = [(uid, base) for uid in ids]
+
+    # Phần dư = amount − Σ(đã ROUND_DOWN), luôn là bội số 0.01 và < n×0.01
+    # -> phát 0.01/người từ đầu danh sách cho tới hết là tổng khớp tuyệt đối
+    remainder = payload.amount - sum(amount for _, amount in raw)
+    shares: list[tuple[UUID, Decimal]] = []
+    for uid, amount in raw:
+        extra = min(_CENT, remainder)
+        shares.append((uid, amount + extra))
+        remainder -= extra
+    return shares
+
+
 class ExpenseService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -118,7 +163,7 @@ class ExpenseService:
                     + ", ".join(str(u) for u in outsiders)
                 )
 
-        shares = self._compute_shares(payload, sorted(active_ids, key=str))
+        shares = compute_shares(payload, sorted(active_ids, key=str))
         expense = Expense(
             group_id=group_id,
             payer_id=payer_id,
@@ -341,49 +386,6 @@ class ExpenseService:
         return settlement
 
     # -------------------------------------------------------------- helpers
-
-    def _compute_shares(
-        self, payload: ExpenseCreate, default_participants: list[UUID]
-    ) -> list[tuple[UUID, Decimal]]:
-        """Tính phần mỗi người. Bất biến: tổng shares == amount (đến 0.01).
-
-        ROUND_DOWN từng phần rồi phân phối phần dư 0.01/lượt cho các người
-        đầu danh sách — không bao giờ lệch tổng do làm tròn.
-        """
-        if payload.split_method == SplitMethod.EXACT:
-            assert payload.participants is not None  # đã validate ở schema
-            return [(p.user_id, p.amount) for p in payload.participants]  # type: ignore[misc]
-
-        if payload.split_method == SplitMethod.RATIO:
-            assert payload.participants is not None
-            total_weight = sum(p.weight for p in payload.participants)  # type: ignore[misc]
-            raw = [
-                (
-                    p.user_id,
-                    (payload.amount * p.weight / total_weight).quantize(  # type: ignore[operator]
-                        _CENT, rounding=ROUND_DOWN
-                    ),
-                )
-                for p in payload.participants
-            ]
-        else:  # EQUAL
-            ids = (
-                [p.user_id for p in payload.participants]
-                if payload.participants
-                else default_participants
-            )
-            base = (payload.amount / len(ids)).quantize(_CENT, rounding=ROUND_DOWN)
-            raw = [(uid, base) for uid in ids]
-
-        # Phần dư = amount − Σ(đã ROUND_DOWN), luôn là bội số 0.01 và < n×0.01
-        # -> phát 0.01/người từ đầu danh sách cho tới hết là tổng khớp tuyệt đối
-        remainder = payload.amount - sum(amount for _, amount in raw)
-        shares: list[tuple[UUID, Decimal]] = []
-        for uid, amount in raw:
-            extra = min(_CENT, remainder)
-            shares.append((uid, amount + extra))
-            remainder -= extra
-        return shares
 
     async def _get_group_for_member(
         self, group_id: UUID, user_id: UUID

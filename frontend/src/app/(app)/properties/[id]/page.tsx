@@ -12,6 +12,7 @@ import {
   fmtMoney,
   fmtPeriod,
   getBillingJob,
+  getInvoicePdfUrl,
   getProperty,
   listContracts,
   listInvoices,
@@ -612,8 +613,21 @@ function BillingTab({ propertyId }: { propertyId: string }) {
                 <td className="px-3 py-2">
                   <Badge color={badge.color}>{badge.label}</Badge>
                 </td>
-                <td className="px-3 py-2 text-xs text-gray-400">
-                  {inv.pdf_url ? "✓ S3" : "—"}
+                <td className="px-3 py-2">
+                  {inv.pdf_url ? (
+                    <Button
+                      variant="secondary"
+                      onClick={async () => {
+                        // Presigned URL hết hạn 15' — xin mới mỗi lần bấm
+                        const { url } = await getInvoicePdfUrl(inv.id);
+                        window.open(url, "_blank");
+                      }}
+                    >
+                      Tải PDF
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  )}
                 </td>
               </tr>
             );

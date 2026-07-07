@@ -218,6 +218,12 @@ export function listInvoices(propertyId: string): Promise<Invoice[]> {
   return api(`/billing/invoices?property_id=${propertyId}`);
 }
 
+export function getInvoicePdfUrl(
+  invoiceId: string,
+): Promise<{ url: string; expires_in: number }> {
+  return api(`/billing/invoices/${invoiceId}/pdf-url`);
+}
+
 // ------------------------------------------------------------------ expenses
 
 export function listGroups(): Promise<ExpenseGroup[]> {

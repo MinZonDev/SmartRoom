@@ -7,11 +7,11 @@
 
 | # | Hạng mục | Trạng thái |
 |---|---|---|
-| A | Git init + .gitignore + README + commit đầu tiên | 🔄 đang làm |
-| B | Bộ test pytest cho logic thuần (chia tiền, matching, OCR, security) | ⬜ |
-| C | Presigned URL tải PDF hóa đơn (backend + nút trên FE) | ⬜ |
-| D | Commit mốc 2 (tests + presigned URL) | ⬜ |
-| E | *Session sau:* refresh token, trang tenant, OCR confirm→meter_readings, CI GitHub Actions, Terraform SQS/DLQ, notification email | ⬜ backlog |
+| A | Git init + .gitignore + README + commit đầu tiên | ✅ commit `2f5ec6d` (102 files; đã gỡ repo git con do create-next-app tạo trong frontend/, .gitattributes ép LF cho *.sh) |
+| B | Bộ test pytest cho logic thuần (chia tiền, matching, OCR, security) | ✅ 30/30 pass — `backend/tests/`, chạy: `python -m pytest -q` (đã refactor `compute_shares` thành hàm thuần) |
+| C | Presigned URL tải PDF hóa đơn (backend + nút trên FE) | ✅ test thật: tải PDF 2133 bytes từ LocalStack, landlord khác bị 404 |
+| D | Commit mốc 2 (tests + presigned URL) | ✅ |
+| E | *Session sau:* refresh token, trang tenant, OCR confirm→meter_readings, CI GitHub Actions, Terraform SQS/DLQ, notification email | ⬜ backlog — xem chi tiết mục "Việc tiếp theo" |
 
 *Cập nhật bảng này ngay khi chuyển trạng thái: 🔄 đang làm / ✅ xong / ⬜ chưa.*
 
@@ -111,6 +111,17 @@
 - **Backend bổ sung cho FE**: CORS middleware (localhost:3000 + **3001**), `GET /billing/invoices?property_id=`, `GET /auth/users/lookup?email=` (FE nhập email thay vì UUID khi thêm người vào hợp đồng/nhóm).
 - Đã verify: `npm run build` sạch (typecheck + 8 routes), dev server render mọi page 200, CORS preflight OK.
 - ⚠️ **Port 3000 bị Grafana của dự án cũ chiếm** → Next dev tự nhảy sang **3001** (CORS đã cover cả 2). Dọn container cũ thì về 3000.
+
+### 2026-07-07 — Hoàn thiện đợt 1: Git + Tests + Presigned URL ✅
+- **Git**: repo khởi tạo tại root, branch `main`. Commit `2f5ec6d` (MVP 102 files) + commit mốc 2. Lưu ý đã xử lý: create-next-app tự tạo repo git con trong `frontend/` (đã gỡ `frontend/.git`); `.gitattributes` ép **LF cho `*.sh`** — nếu không script LocalStack init sẽ chết vì CRLF.
+- **Tests**: `backend/tests/` — 30 tests pass (`python -m pytest -q`, cần `pip install -r requirements-dev.txt`):
+  - `test_expense_split.py`: bất biến SUM(shares)==amount cho cả 3 kiểu chia + làm tròn + schema validation
+  - `test_matching.py`: hard filter loại người hút thuốc, không tự match chính mình, ranking đúng
+  - `test_ocr_service.py`: FakeEngine (không cần torch) — chọn best candidate, loại serial dài, needs_confirmation
+  - `test_auth_security.py`: bcrypt roundtrip + dummy hash, JWT giả mạo/sai secret/sai type bị từ chối
+  - Refactor kèm theo: `compute_shares` từ method → hàm thuần module-level (testable không cần DB)
+  - *Chưa có*: integration tests với DB (testcontainers) — backlog
+- **Presigned URL PDF**: `GET /billing/invoices/{id}/pdf-url` → URL S3 có chữ ký, hết hạn 15 phút (bucket không bao giờ public). FE: nút "Tải PDF" trong tab Hóa đơn xin URL mới mỗi lần bấm. `S3Storage` thêm `presigned_url()` + `key_from_uri()`.
 
 ---
 
@@ -242,9 +253,11 @@ curl -X POST http://localhost:8000/api/v1/billing/close-month \
 - [ ] **Frontend nâng cao**: trang tenant (xem hóa đơn của mình), presigned URL tải PDF, sửa/xóa phòng-dịch vụ trên UI, chia ratio/exact trên UI, loading states, react-query
 - [ ] **Expenses nâng cao**: rời nhóm (chặn khi balance ≠ 0), sửa khoản chi, gắn nhóm với room/contract, OCR hóa đơn từ `receipt_image_url`
 - [ ] **PDF tiếng Việt**: đăng ký font TTF (Roboto/Noto Sans) trong `billing/pdf.py` — Helvetica không render được dấu
-- [ ] **Presigned URL S3** cho tenant tải hóa đơn (đừng public bucket)
+- [x] ~~Presigned URL S3~~ — xong 2026-07-07 (landlord; tenant chờ trang tenant)
 - [ ] **Hạ tầng SQS**: khai báo DLQ + maxReceiveCount (Terraform/CDK)
-- [ ] **Tests**: unit test `InvoiceGenerationService` với `InMemoryPublisher` + SQLite/testcontainers
+- [x] ~~Unit tests logic thuần~~ — 30 tests (chia tiền, matching, OCR, security)
+- [ ] **Integration tests**: `InvoiceGenerationService`/`ContractService` với testcontainers Postgres
+- [ ] **CI**: GitHub Actions — pytest + npm build mỗi push
 - [ ] **Notification**: bắn email/Zalo cho tenant khi hóa đơn phát hành (event sau khi worker xong)
 - [ ] **OCR nâng cao**: crop ROI mặt số (detect vùng hiển thị trước khi OCR), lưu ảnh gốc lên S3 + gán `meter_readings.image_url`, endpoint xác nhận kết quả ghi vào `meter_readings`, bake model weights vào Docker image (`OCR_MODEL_DIR`)
 - [ ] **Matching hoàn thiện**: bảng `user_habit_profiles` (migration mới), router `POST /matching/suggestions`, lấy candidates từ DB theo khu vực/tin đăng, cache kết quả vào Redis, học trọng số từ feedback match thành công

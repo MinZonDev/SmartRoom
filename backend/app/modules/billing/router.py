@@ -8,16 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_session
-from app.core.dependencies import get_current_user_id, get_job_tracker
+from app.core.dependencies import get_current_user_id, get_job_tracker, get_storage
 from app.modules.billing.schemas import (
     BillingJobStatusResponse,
     CloseMonthAccepted,
     CloseMonthRequest,
+    InvoicePdfUrlResponse,
     InvoiceResponse,
 )
 from app.modules.billing.service import BillingCommandService, InvoiceQueryService
+from app.shared.exceptions import NotFoundError
 from app.shared.job_tracker import JobTracker
 from app.shared.messaging import MessagePublisher, get_billing_publisher
+from app.shared.storage import S3Storage
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -65,6 +68,29 @@ async def list_invoices(
         current_user_id, property_id
     )
     return [InvoiceResponse.model_validate(i) for i in invoices]
+
+
+@router.get(
+    "/invoices/{invoice_id}/pdf-url",
+    response_model=InvoicePdfUrlResponse,
+    summary="Presigned URL tải PDF hóa đơn (hết hạn sau 15 phút)",
+)
+async def get_invoice_pdf_url(
+    invoice_id: UUID,
+    current_user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    storage: Annotated[S3Storage, Depends(get_storage)],
+) -> InvoicePdfUrlResponse:
+    invoice = await InvoiceQueryService(session).get_owned_invoice(
+        current_user_id, invoice_id
+    )
+    if not invoice.pdf_url:
+        raise NotFoundError("Hóa đơn chưa có file PDF")
+    expires = 900
+    url = await storage.presigned_url(
+        storage.key_from_uri(invoice.pdf_url), expires_seconds=expires
+    )
+    return InvoicePdfUrlResponse(url=url, expires_in=expires)
 
 
 @router.get(
