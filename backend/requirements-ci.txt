@@ -5,6 +5,8 @@ pydantic>=2.10
 pydantic-settings>=2.7
 email-validator>=2.2
 sqlalchemy[asyncio]>=2.0
+# asyncpg cần ngay lúc import: app/core/database.py tạo engine ở module level
+asyncpg>=0.30
 fastapi>=0.115
 redis>=5.2
 PyJWT>=2.10
