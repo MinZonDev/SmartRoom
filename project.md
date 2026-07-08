@@ -23,7 +23,7 @@
 | G1 | Terraform: SQS + DLQ + S3 + SES (verify bằng apply vào LocalStack) | ✅ apply 6 resources OK rồi destroy sạch (`infra/terraform/`) |
 | G2 | Notification email khi phát hành hóa đơn (SES, event-driven sau worker) | ✅ e2e thật: 3 email đúng người đúng hóa đơn qua LocalStack SES |
 | G3 | Đổi mật khẩu + tự cấp role landlord khi tạo property đầu tiên | ✅ e2e: sai mật khẩu 401, đổi xong login cũ 401/mới OK; user_roles có landlord, idempotent |
-| G4 | Commit mốc 6 + CI xanh | 🔄 đang chờ CI |
+| G4 | Commit mốc 6 + CI xanh | ✅ commit `ae9b871` — CI xanh |
 | H | *Session sau:* deploy AWS thật (cần credentials), quên mật khẩu (cần email thật), OCR crop ROI với ảnh đồng hồ thật | ⬜ backlog |
 
 *Cập nhật bảng này ngay khi chuyển trạng thái: 🔄 đang làm / ✅ xong / ⬜ chưa.*
