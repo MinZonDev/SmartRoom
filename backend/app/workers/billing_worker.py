@@ -14,14 +14,17 @@ Cơ chế:
 
 import asyncio
 import logging
+from uuid import UUID
 
 from redis.asyncio import Redis
 
 from app.core.config import Settings, get_settings
 from app.core.database import async_session_factory
+from app.modules.billing.notifications import InvoiceNotificationService
 from app.modules.billing.schemas import BillingTaskMessage
 from app.modules.billing.service import InvoiceGenerationService
 from app.shared.aws import boto3_client
+from app.shared.email import SESEmailSender
 from app.shared.job_tracker import JobStatus, JobTracker
 from app.shared.storage import FileStorage, S3Storage
 
@@ -48,6 +51,19 @@ async def process_message(
             summary = await service.generate_for_property(
                 task.property_id, task.period
             )
+            # Email báo tenant — best-effort: lỗi email không được fail job
+            # (hóa đơn đã tạo xong; SQS retry sẽ tạo trùng email chứ không tạo lại hóa đơn)
+            if summary.invoice_ids:
+                try:
+                    notifier = InvoiceNotificationService(
+                        session, SESEmailSender(get_settings().ses_sender_email)
+                    )
+                    sent = await notifier.notify_issued(
+                        [UUID(i) for i in summary.invoice_ids]
+                    )
+                    logger.info("Đã gửi %d email báo hóa đơn", sent)
+                except Exception:
+                    logger.exception("Gửi email notification thất bại")
     except Exception as exc:
         await tracker.set_status(task.job_id, JobStatus.FAILED, error=str(exc))
         raise

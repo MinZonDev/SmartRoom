@@ -143,6 +143,8 @@ class BillingRunSummary:
     invoices_created: int = 0
     skipped: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # ID hóa đơn vừa tạo — worker dùng để gửi email notification
+    invoice_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -178,6 +180,7 @@ class InvoiceGenerationService:
                 invoice = await self._create_invoice(contract, services, period)
                 await self._attach_pdf(invoice, contract, prop.name)
                 summary.invoices_created += 1
+                summary.invoice_ids.append(str(invoice.id))
             except MissingMeterReadingError as exc:
                 # Thiếu chỉ số 1 phòng không được chặn cả tòa nhà
                 summary.errors.append(f"{contract.code}: {exc}")

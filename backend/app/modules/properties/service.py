@@ -8,9 +8,11 @@ tài nguyên có tồn tại hay không cho người ngoài.
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.auth.models import UserRoleAssignment
 from app.modules.properties.models import (
     MeterReading,
     Property,
@@ -26,6 +28,7 @@ from app.modules.properties.schemas import (
     ServiceCreate,
     ServiceUpdate,
 )
+from app.shared.enums import UserRole
 from app.shared.exceptions import ConflictError, NotFoundError
 
 
@@ -72,6 +75,12 @@ class PropertyService:
     ) -> Property:
         prop = Property(owner_id=owner_id, **payload.model_dump())
         self._session.add(prop)
+        # Sở hữu tòa nhà => cấp role landlord (idempotent — có rồi thì bỏ qua)
+        await self._session.execute(
+            pg_insert(UserRoleAssignment)
+            .values(user_id=owner_id, role=UserRole.LANDLORD)
+            .on_conflict_do_nothing()
+        )
         await self._session.commit()
         return prop
 

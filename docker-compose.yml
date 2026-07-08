@@ -33,7 +33,7 @@ services:
     image: localstack/localstack:3
     container_name: smartroom-localstack
     environment:
-      SERVICES: sqs,s3
+      SERVICES: sqs,s3,ses
     ports:
       - "4566:4566"
     volumes:

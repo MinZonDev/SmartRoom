@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     aws_secret_access_key: str | None = None
     sqs_billing_queue_url: str = ""
     s3_invoice_bucket: str = "smartroom-invoices"
+    # Email hệ thống — production phải verify identity với SES trước
+    ses_sender_email: str = "no-reply@smartroom.demo"
 
     # --- OCR ---
     ocr_gpu: bool = False

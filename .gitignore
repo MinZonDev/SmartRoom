@@ -25,5 +25,11 @@ frontend/next-env.d.ts
 Thumbs.db
 *.log
 
+# --- Terraform (commit .tf và .terraform.lock.hcl; KHÔNG commit state) ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
 # --- Data ---
 *.sqlite3

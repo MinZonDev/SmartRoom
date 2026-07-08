@@ -88,6 +88,17 @@ class AuthService:
         await self._denylist.revoke(jti, self._remaining_ttl(payload))
         return self._issue_tokens(user.id)
 
+    async def change_password(
+        self, user: User, current_password: str, new_password: str
+    ) -> None:
+        password_ok = await asyncio.to_thread(
+            verify_password, current_password, user.password_hash
+        )
+        if not password_ok:
+            raise InvalidCredentialsError("Mật khẩu hiện tại không đúng")
+        user.password_hash = await asyncio.to_thread(hash_password, new_password)
+        await self._session.commit()
+
     async def logout(self, refresh_token: str) -> None:
         """Thu hồi refresh token. Idempotent — token rác/hết hạn cũng trả OK."""
         assert self._denylist is not None, "logout cần denylist"

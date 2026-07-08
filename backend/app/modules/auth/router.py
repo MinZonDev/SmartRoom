@@ -14,6 +14,7 @@ from app.modules.auth.denylist import TokenDenylist
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
+    ChangePasswordRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
@@ -92,6 +93,21 @@ async def logout(
     denylist: Annotated[TokenDenylist, Depends(get_denylist)],
 ) -> None:
     await AuthService(session, denylist).logout(payload.refresh_token)
+
+
+@router.post(
+    "/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Đổi mật khẩu (yêu cầu mật khẩu hiện tại)",
+)
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    await AuthService(session).change_password(
+        current_user, payload.current_password, payload.new_password
+    )
 
 
 @router.get("/me", response_model=UserResponse, summary="Thông tin user hiện tại")

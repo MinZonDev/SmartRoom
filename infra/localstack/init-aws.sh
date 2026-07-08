@@ -19,4 +19,7 @@ awslocal sqs create-queue --queue-name smartroom-billing \
 
 awslocal s3 mb s3://smartroom-invoices || true
 
-echo "[smartroom] LocalStack init xong: queue billing + DLQ + bucket hoa don"
+# SES: verify địa chỉ gửi để test notification email local
+awslocal ses verify-email-identity --email-address no-reply@smartroom.demo
+
+echo "[smartroom] LocalStack init xong: queue billing + DLQ + bucket + SES sender"

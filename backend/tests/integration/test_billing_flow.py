@@ -127,6 +127,36 @@ async def test_idempotent_chay_lai_khong_tao_trung(db_session) -> None:
     assert count == 1
 
 
+class FakeEmailSender:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str]] = []  # (to, subject)
+
+    async def send(self, to: str, subject: str, body: str) -> None:
+        self.sent.append((to, subject))
+
+
+async def test_notification_gui_email_cho_moi_thanh_vien(db_session) -> None:
+    from uuid import UUID
+
+    from app.modules.billing.notifications import InvoiceNotificationService
+
+    prop = await _seed_property(db_session)
+    summary = await InvoiceGenerationService(
+        db_session, FakeStorage()
+    ).generate_for_property(prop.id, PERIOD)
+
+    sender = FakeEmailSender()
+    sent = await InvoiceNotificationService(db_session, sender).notify_issued(
+        [UUID(i) for i in summary.invoice_ids]
+    )
+
+    # Hợp đồng có 2 thành viên đang ở -> 2 email
+    assert sent == 2
+    recipients = {to for to, _ in sender.sent}
+    assert recipients == {"a@it.test", "b@it.test"}
+    assert all("INV-" in subject for _, subject in sender.sent)
+
+
 async def test_thieu_chi_so_ghi_loi_khong_tao_hoa_don(db_session) -> None:
     prop = await _seed_property(db_session, with_reading=False)
     summary = await InvoiceGenerationService(

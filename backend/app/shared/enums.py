@@ -3,6 +3,12 @@
 from enum import Enum
 
 
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    LANDLORD = "landlord"
+    TENANT = "tenant"
+
+
 class RoomStatus(str, Enum):
     AVAILABLE = "available"
     OCCUPIED = "occupied"

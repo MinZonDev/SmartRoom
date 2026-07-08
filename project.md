@@ -20,7 +20,11 @@
 | F2a | Integration tests với Postgres thật (billing/contracts/expenses) + postgres service trong CI | ✅ 6 tests — tổng 43→46 pass |
 | F2b | Logout + thu hồi refresh token (Redis denylist, refresh dùng-một-lần) | ✅ test thật: dùng lại refresh cũ 401, refresh sau logout 401 |
 | F2c | Commit mốc 5 + CI xanh | ✅ commit `2584bdb` — CI xanh, integration tests chạy trên GitHub với postgres service |
-| G | *Session sau:* Terraform SQS/DLQ, notification email, deploy AWS, OCR crop ROI | ⬜ backlog |
+| G1 | Terraform: SQS + DLQ + S3 + SES (verify bằng apply vào LocalStack) | ✅ apply 6 resources OK rồi destroy sạch (`infra/terraform/`) |
+| G2 | Notification email khi phát hành hóa đơn (SES, event-driven sau worker) | ✅ e2e thật: 3 email đúng người đúng hóa đơn qua LocalStack SES |
+| G3 | Đổi mật khẩu + tự cấp role landlord khi tạo property đầu tiên | ✅ e2e: sai mật khẩu 401, đổi xong login cũ 401/mới OK; user_roles có landlord, idempotent |
+| G4 | Commit mốc 6 + CI xanh | 🔄 đang chờ CI |
+| H | *Session sau:* deploy AWS thật (cần credentials), quên mật khẩu (cần email thật), OCR crop ROI với ảnh đồng hồ thật | ⬜ backlog |
 
 *Cập nhật bảng này ngay khi chuyển trạng thái: 🔄 đang làm / ✅ xong / ⬜ chưa.*
 
@@ -165,6 +169,13 @@
   - Access token vẫn stateless (sống tối đa 60') — trade-off chấp nhận được
 - Tests: **46 pass** (40 unit + 6 integration). E2E curl: refresh cũ → 401 ✓, refresh sau logout → 401 ✓.
 
+### 2026-07-08 — Hoàn thiện đợt 5: Terraform + Email notification + Auth bổ sung ✅
+- **Terraform** (`infra/terraform/`): SQS billing + DLQ (redrive maxReceiveCount=3, visibility 120s, long-poll 20s) + S3 (block public access + SSE-AES256, chỉ truy cập qua presigned URL) + SES sender identity. Biến `use_localstack=true` trỏ provider về :4566 (kèm `s3_use_path_style` — không có thì lỗi DNS `bucket.localhost`). **Đã verify: apply 6 resources vào LocalStack rồi destroy sạch.** Production: `terraform apply` không var (cần AWS credentials). State đã gitignore.
+- **Email notification** (`shared/email.py` + `billing/notifications.py`): worker sau khi sinh hóa đơn gửi email cho mọi thành viên đang ở của từng hợp đồng (subject + body tiếng Việt, tổng tiền, hạn thanh toán). **Best-effort**: email lỗi chỉ log không fail job. LocalStack cần `SERVICES: sqs,s3,ses` (đã sửa compose — **đổi SERVICES phải recreate container**) + verify sender trong init script. **e2e thật**: chốt tháng 2026-08 → 3 email đúng người (tenant ở 2 phòng nhận 2 email). Xem email đã gửi: `curl localhost:4566/_aws/ses` (LocalStack v3 — KHÔNG phải `/_localstack/ses`).
+- **Auth bổ sung**: `POST /auth/change-password` (yêu cầu mật khẩu hiện tại, bcrypt trong thread); tạo property đầu tiên tự cấp role `landlord` vào `user_roles` (pg `ON CONFLICT DO NOTHING` — idempotent, model `UserRoleAssignment` mới).
+- Tests: **48 pass** (+2 integration: notification gửi đúng thành viên, landlord role idempotent).
+- Terraform binary tải về scratchpad (không cài hệ thống) — máy này chưa có sẵn terraform/gh CLI.
+
 ---
 
 ## 📁 Cấu trúc backend
@@ -290,7 +301,8 @@ curl -X POST http://localhost:8000/api/v1/billing/close-month \
 - [x] ~~Module auth JWT~~ — xong 2026-07-07 (login demo: `chunha@smartroom.demo` / `smartroom123`)
 - [x] ~~Refresh token + rate-limit login~~ — xong 2026-07-07
 - [x] ~~Revocation list logout + refresh dùng-một-lần~~ — xong 2026-07-08
-- [ ] **Auth còn lại**: đổi/quên mật khẩu, cấp role landlord khi tạo property đầu tiên
+- [x] ~~Đổi mật khẩu + role landlord tự cấp~~ — xong 2026-07-08
+- [ ] **Auth còn lại**: quên mật khẩu (cần email production)
 - [x] ~~Module properties/contracts CRUD~~ — xong 2026-07-07, e2e toàn trình đã kiểm chứng
 - [x] ~~Module expenses~~ — xong 2026-07-07, e2e đã kiểm chứng (backend MVP hoàn chỉnh 🎉)
 - [x] ~~Frontend Next.js MVP~~ — xong 2026-07-07 (login/dashboard/property 4 tab/expenses)
@@ -298,11 +310,11 @@ curl -X POST http://localhost:8000/api/v1/billing/close-month \
 - [ ] **Expenses nâng cao**: rời nhóm (chặn khi balance ≠ 0), sửa khoản chi, gắn nhóm với room/contract, OCR hóa đơn từ `receipt_image_url`
 - [ ] **PDF tiếng Việt**: đăng ký font TTF (Roboto/Noto Sans) trong `billing/pdf.py` — Helvetica không render được dấu
 - [x] ~~Presigned URL S3~~ — xong 2026-07-07 (landlord; tenant chờ trang tenant)
-- [ ] **Hạ tầng SQS**: khai báo DLQ + maxReceiveCount (Terraform/CDK)
+- [x] ~~Terraform SQS/DLQ/S3/SES~~ — xong 2026-07-08, verify bằng LocalStack
 - [x] ~~Unit tests logic thuần~~ — 30 tests (chia tiền, matching, OCR, security)
 - [x] ~~Integration tests~~ — xong 2026-07-08 (Postgres thật, cả local lẫn CI)
 - [x] ~~CI GitHub Actions~~ — file đã có, verify run khi push GitHub lần đầu
-- [ ] **Notification**: bắn email/Zalo cho tenant khi hóa đơn phát hành (event sau khi worker xong)
+- [x] ~~Notification email khi hóa đơn phát hành~~ — xong 2026-07-08 (SES; Zalo backlog)
 - [x] ~~OCR: ảnh S3 + confirm vào meter_readings~~ — xong 2026-07-07, test OCR thật chính xác 100%
 - [ ] **OCR nâng cao**: crop ROI mặt số (detect vùng hiển thị trước khi OCR — cần khi ảnh thật nhiều nhiễu), test với ảnh đồng hồ thật, bake model weights vào Docker image (`OCR_MODEL_DIR`)
 - [ ] **Matching hoàn thiện**: bảng `user_habit_profiles` (migration mới), router `POST /matching/suggestions`, lấy candidates từ DB theo khu vực/tin đăng, cache kết quả vào Redis, học trọng số từ feedback match thành công
